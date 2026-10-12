@@ -187,12 +187,12 @@ spec:
 """
 
 def test_architecture_extractor_extracts_components():
-    with tempfile.NamedTemporaryFile("w", suffix=".pptx", delete=False) as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
         f.write(SAMPLE_ARCH_DOC)
         f_path = f.name
 
     try:
-        doc = parse_document(abs_path=f_path, rel_path="architecture.pptx", project_urn="urn:project:acme:test")
+        doc = parse_document(abs_path=f_path, rel_path="architecture.md", project_urn="urn:project:acme:test")
         extractor = ArchitectureExtractor(project_urn="urn:project:acme:test")
         components = extractor.extract_from_document(doc)
 

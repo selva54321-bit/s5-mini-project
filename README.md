@@ -251,6 +251,44 @@ print(summary.to_dict())
 
 ---
 
+## 📄 Document, Architecture & Policy Ingestion (Phase 04)
+
+The document ingestion pipeline processes multi-format organizational documents (`.pdf`, `.docx`, `.pptx`, `.html`, `.md`, `.txt`) and extracts `Document`, `ArchitectureComponent`, `Policy`, and `SecurityRule` entities with explicit source quotes, section references, and cross-domain links to code.
+
+### Ingesting Documents
+
+Run the document ingestion CLI on any directory of documents:
+
+```bash
+# Ingest and write directly to Neo4j
+python -m app.graph.ingestion.docs.pipeline DATA/true_data
+
+# Dry-run extraction preview without writing to Neo4j
+python -m app.graph.ingestion.docs.pipeline DATA/true_data --no-db
+```
+
+Programmatic usage:
+
+```python
+from app.graph.ingestion.docs.pipeline import ingest_documents
+
+summary = ingest_documents(
+    docs_path="DATA/true_data",
+    project_urn="urn:project:local:default",
+    company_urn="urn:company:acme",
+    write_to_db=True,
+)
+print(summary.to_dict())
+```
+
+### Running the Full Test Suite
+
+```bash
+pytest tests/ -v
+```
+
+---
+
 ## 🧪 Evaluation & Tracing
 
 - **LangChain / LangSmith / Logfire**: Automated tracing and observability are integrated into the execution flow.

@@ -86,7 +86,7 @@ class PolicyExtractor:
             )
 
             # Rule A: Job Requires Resource Limits
-            if "resource limits" in text.lower() or "job-must-have-resources" in text:
+            if ("resource" in text.lower() and "limits" in text.lower()) or "jobrequiresresources" in text.lower() or "job-must-have-resources" in text:
                 rule_slug = "job-must-have-resources"
                 rule_urn = build_security_rule_urn(pol_urn, rule_slug)
                 quote = "All job containers must define resource requests and limits for compliance"
