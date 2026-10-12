@@ -101,6 +101,15 @@ GROQ_FALLBACK_API_KEY=your_groq_fallback_api_key
 # PORTKEY_CONFIG_ID=pc-xxx
 # GROQ_SLUG=your_portkey_groq_alias
 
+# Neo4j Property Graph Database (Graph-RAG System)
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your_neo4j_password
+NEO4J_DATABASE=neo4j
+NEO4J_CONNECTION_TIMEOUT=30.0
+NEO4J_MAX_CONNECTION_LIFETIME=3600.0
+NEO4J_MAX_CONNECTION_POOL_SIZE=50
+
 # Observability (Optional)
 LOGFIRE_TOKEN=your_logfire_token
 ```
@@ -139,6 +148,105 @@ response = rag_agent.invoke(
 )
 
 print(response["messages"][-1].content)
+```
+
+---
+
+## 🕸️ Neo4j Property Graph Storage (Graph-RAG System)
+
+The system includes a dedicated property graph storage engine for multi-hop relationship retrieval across services, code AST, policies, and documents.
+
+### 1. Starting Neo4j Locally (Docker)
+
+You can launch a local Neo4j instance with Docker:
+
+```bash
+docker run -d \
+  --name neo4j-rag \
+  -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=neo4j/your_secure_password \
+  -e NEO4J_PLUGINS='["apoc"]' \
+  neo4j:5.26-community
+```
+
+Then add your credentials to `.env`:
+```ini
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your_secure_password
+NEO4J_DATABASE=neo4j
+```
+
+### 2. Initializing the Graph Schema
+
+The schema initialization is idempotent (`IF NOT EXISTS`) and sets up all 17 uniqueness constraints, symbol lookup indexes, and full-text indexes:
+
+```bash
+python -m app.graph.schema_init
+```
+
+### 3. Checking Database Health
+
+Verify active connectivity, latency, and database version:
+
+```python
+from app.graph.connection import db_manager
+
+health = db_manager.health_check()
+print(health)
+# Output: {'status': 'HEALTHY', 'uri': 'bolt://localhost:7687', 'database': 'neo4j', 'version': '5.26.0', 'edition': 'community', 'latency_ms': 4.12}
+```
+
+### 4. Running Graph Storage Tests
+
+Run the comprehensive unit test suite:
+
+```bash
+pytest tests/test_graph_storage.py -v
+```
+
+To run integration tests against a running Neo4j instance:
+
+```bash
+pytest tests/test_graph_integration.py -v
+```
+
+### 5. Troubleshooting Connection Failures
+
+- **`ServiceUnavailable: [Errno 111] Connection refused`**: The Neo4j service is not running or port `7687` is blocked. Verify container status with `docker ps` and check if Neo4j is listening on `7687`.
+- **`AuthError: The client is unauthorized due to authentication failure`**: Check `NEO4J_USERNAME` and `NEO4J_PASSWORD` in your `.env` file.
+- **`ValueError: Neo4j password is not configured`**: Ensure `NEO4J_PASSWORD` is exported in the environment or defined in `.env`.
+
+---
+
+## 💻 Source Code Analysis & Repository Ingestion (Phase 03)
+
+The code ingestion pipeline statically analyzes Python repositories using the built-in `ast` parser, extracting Files, Classes, Functions, APIs, Tests, Imports, and Calls into the property graph.
+
+### Ingesting a Repository
+
+Run the ingestion CLI on any local repository path:
+
+```bash
+# Ingest and write directly to Neo4j
+python -m app.graph.ingestion.code.pipeline .
+
+# Dry-run extraction preview without writing to Neo4j
+python -m app.graph.ingestion.code.pipeline . --no-db
+```
+
+Programmatic usage:
+
+```python
+from app.graph.ingestion.code.pipeline import ingest_repository
+
+summary = ingest_repository(
+    repo_path=".",
+    repo_name="my-project",
+    org="acme",
+    write_to_db=True,
+)
+print(summary.to_dict())
 ```
 
 ---
