@@ -20,6 +20,9 @@ langchain-google-genai      # LangChain integration for Gemini models
 qdrant-client               # Vector Database for semantic search
 flashrank                   # Ultra-fast local cross-encoder for semantic reranking
 
+# --- GRAPH DATABASE ---
+neo4j                       # Official Neo4j Python driver for Property Graph operations
+
 # --- LANGCHAIN & AGENTIC ORCHESTRATION ---
 langchain                   # Core LLM orchestration
 langgraph                   # State-machine logic for cyclic agent flows

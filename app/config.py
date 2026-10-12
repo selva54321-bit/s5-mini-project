@@ -27,4 +27,13 @@ class Settings:
     # routing requests to an alias that has not been configured in Portkey.
     PORTKEY_ENABLED = bool(PORTKEY_API_KEY and PORTKEY_CONFIG_ID)
 
+    # Neo4j Graph Database Settings
+    NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
+    NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+    NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
+    NEO4J_CONNECTION_TIMEOUT = float(os.getenv("NEO4J_CONNECTION_TIMEOUT", "30.0"))
+    NEO4J_MAX_CONNECTION_LIFETIME = float(os.getenv("NEO4J_MAX_CONNECTION_LIFETIME", "3600.0"))
+    NEO4J_MAX_CONNECTION_POOL_SIZE = int(os.getenv("NEO4J_MAX_CONNECTION_POOL_SIZE", "50"))
+
 settings=Settings()
