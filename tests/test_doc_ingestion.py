@@ -134,13 +134,13 @@ retention_policies = {
 """
 
 def test_policy_extractor_extracts_rules_with_provenance():
-    with tempfile.NamedTemporaryFile("w", suffix=".docx", delete=False) as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
         f.write(SAMPLE_COMPLIANCE_DOC)
         f_path = f.name
 
     try:
-        # Parse document (txt-based fallback in test)
-        doc = parse_document(abs_path=f_path, rel_path="policies/compliance.docx", project_urn="urn:project:acme:test")
+        # Parse document
+        doc = parse_document(abs_path=f_path, rel_path="policies/compliance.md", project_urn="urn:project:acme:test")
         extractor = PolicyExtractor(company_urn="urn:company:acme")
         policies = extractor.extract_from_document(doc)
 
