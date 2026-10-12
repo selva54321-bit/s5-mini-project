@@ -198,7 +198,8 @@ class QueryInterpreter:
 
     def _extract_entity_mentions(self, text: str) -> List[str]:
         """
-        Extracts candidate entity mentions using backticks, quotes, keywords, and Pascal/snake_case tokens.
+        Extracts candidate entity mentions using backticks, quotes, qualified symbols,
+        keywords, and Pascal/snake_case tokens.
         """
         mentions: List[str] = []
 
@@ -215,30 +216,56 @@ class QueryInterpreter:
             if u not in mentions:
                 mentions.append(u)
 
-        # 3. Explicit keywords: function foo, class Bar, service baz, API /route
+        # 3. Dotted qualified names: auth.security.authenticate, app.routes.api
+        dotted = re.findall(r"\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+)\b", text)
+        for d in dotted:
+            if d not in mentions:
+                mentions.append(d)
+
+        # 4. Contextual verb/noun targets: who calls <target>, impact of <target>, tests for <target>
+        target_patterns = [
+            r"(?:who\s+calls|what\s+calls|callers\s+of)\s+([A-Za-z0-9_\-\.\/]+)",
+            r"(?:callees\s+of|invoked\s+by)\s+([A-Za-z0-9_\-\.\/]+)",
+            r"(?:impact\s+of|blast\s+radius\s+of|modifying|changing)\s+(?:function\s+|class\s+|service\s+)?([A-Za-z0-9_\-\.\/]+)",
+            r"(?:tests\s+(?:for|covering)|test\s+suite\s+for)\s+([A-Za-z0-9_\-\.\/]+)",
+            r"(?:policies\s+govern(?:ing)?|governed\s+by)\s+([A-Za-z0-9_\-\.\/]+)",
+        ]
+        for pat in target_patterns:
+            matches = re.findall(pat, text, re.IGNORECASE)
+            for m in matches:
+                val = m.strip(" ?.,;")
+                if val and val not in mentions:
+                    mentions.append(val)
+
+        # 5. Explicit keywords: function foo, class Bar, service baz, API /route
         kw_matches = re.findall(
             r"\b(?:function|fn|class|service|api|component|table|file|policy|repo)\s+([A-Za-z0-9_\-\.\/]+)\b",
             text,
             re.IGNORECASE,
         )
         for m in kw_matches:
-            val = m.strip()
+            val = m.strip(" ?.,;")
             if val and len(val) > 1 and val not in mentions:
                 mentions.append(val)
 
-        # 4. HTTP endpoints: /api/v1/...
+        # 6. HTTP endpoints: /api/v1/...
         routes = re.findall(r"(\/(?:api\/)?[A-Za-z0-9_\-\.\/]+)", text)
         for r in routes:
-            if len(r) > 2 and r not in mentions:
-                mentions.append(r)
+            clean_r = r.strip(" ?.,;")
+            if len(clean_r) > 2 and clean_r not in mentions:
+                mentions.append(clean_r)
 
-        # 5. Fallback: Identifier-like tokens (PascalCase or snake_case with > 3 chars)
-        if not mentions:
-            candidate_tokens = re.findall(r"\b([A-Z][a-zA-Z0-9]+|[a-z0-9]+_[a-z0-9_]+)\b", text)
-            stopwords = {"what", "which", "where", "when", "does", "have", "this", "that", "these", "those"}
-            for t in candidate_tokens:
-                if t.lower() not in stopwords and t not in mentions:
-                    mentions.append(t)
+        # 7. Fallback: Identifier-like tokens (PascalCase or snake_case with > 3 chars)
+        stopwords = {
+            "what", "which", "where", "when", "why", "who", "whom", "whose", "how",
+            "does", "have", "this", "that", "these", "those", "show", "find", "list",
+            "lookup", "describe", "between", "path", "connection", "impact", "tests",
+            "calls", "depend", "dependencies", "service", "function", "class",
+        }
+        candidate_tokens = re.findall(r"\b([A-Z][a-zA-Z0-9]+|[a-z0-9]+_[a-z0-9_]+)\b", text)
+        for t in candidate_tokens:
+            if t.lower() not in stopwords and t not in mentions:
+                mentions.append(t)
 
         return mentions
 
