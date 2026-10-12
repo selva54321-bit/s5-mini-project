@@ -224,7 +224,19 @@ class MockNeo4jTx:
                             queue.append((dep_id, new_nodes, new_rels))
             return records
 
-        # 7. Bounded Paths Outgoing
+        # 7. Bounded Paths Outgoing & Incoming
+        if "MATCH p = (s {id: $source_id})<-" in q:
+            src_id = params.get("source_id")
+            records = []
+            s_node = MockPathNode(self.nodes[src_id], [self.nodes[src_id]["label"]])
+            for e in self.edges:
+                if e["target_id"] == src_id:
+                    caller_id = e["source_id"]
+                    c_node = MockPathNode(self.nodes[caller_id], [self.nodes[caller_id]["label"]])
+                    rel = MockPathRel(c_node, s_node, e["type"], e.get("properties", {}))
+                    records.append(MockRecord({"p": MockPath([c_node, s_node], [rel]), "hop_length": 1}))
+            return records
+
         if "MATCH p = (s {id: $source_id})-" in q:
             src_id = params.get("source_id")
             records = []
@@ -600,7 +612,7 @@ def test_multihop_path_discovery(graph_fixture):
 
     res = retriever.retrieve(spec)
     assert len(res.paths) > 0
-    assert res.paths[0].hop_length == 2
+    assert res.paths[0].hop_length == 3
     # Verify path traversed intermediate routes.py or login_endpoint
     path_nodes = [n.id for n in res.paths[0].nodes]
     assert "urn:service:local:auth_service" in path_nodes
