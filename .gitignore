@@ -1,0 +1,22 @@
+DATA/*
+# Environment variables
+.env
+.env.*
+
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+.env
+
