@@ -38,8 +38,8 @@ class ExtractedPolicy:
     code: str
     title: str
     category: str
-    rules: List[ExtractedSecurityRule] = field(default_factory=list)
     source_doc_urn: str
+    rules: List[ExtractedSecurityRule] = field(default_factory=list)
     page_or_slide: Optional[int] = None
     confidence: float = 1.0
 
