@@ -46,11 +46,11 @@ def _extract_node_from_record(node_dict: Dict[str, Any], labels: List[str], hop:
     """Extracts a RetrievedNode with provenance details from Neo4j record dictionary."""
     node_id = str(node_dict.get("id", ""))
     primary_label = labels[0] if labels else "Unknown"
-    name = str(node_dict.get("name") or node_id)
+    name = str(node_dict.get("name") or node_dict.get("title") or node_dict.get("code") or node_id)
 
     # Provenance fields
     p_type = node_dict.get("provenance_provenance_type") or node_dict.get("provenance_type")
-    p_file = node_dict.get("provenance_source_file_path") or node_dict.get("source_file_path") or node_dict.get("file_path")
+    p_file = node_dict.get("provenance_source_file_path") or node_dict.get("source_file_path") or node_dict.get("file_path") or node_dict.get("path")
     line_start = node_dict.get("provenance_line_start") or node_dict.get("line_start")
     line_end = node_dict.get("provenance_line_end") or node_dict.get("line_end")
     lines_str = f"L{line_start}-{line_end}" if line_start and line_end else (f"L{line_start}" if line_start else None)
@@ -178,8 +178,14 @@ class GraphTraversalEngine:
                 edges_in_path = []
 
                 # Parse path nodes and relationships
-                raw_nodes = path_obj.nodes
-                raw_rels = path_obj.relationships
+                if hasattr(path_obj, "nodes"):
+                    raw_nodes = path_obj.nodes
+                    raw_rels = path_obj.relationships
+                elif isinstance(path_obj, list):
+                    raw_nodes = [path_obj[i] for i in range(0, len(path_obj), 2)]
+                    raw_rels = [path_obj[i] for i in range(1, len(path_obj), 2)]
+                else:
+                    continue
 
                 # Access control check for all nodes in path
                 allowed = True
@@ -264,8 +270,14 @@ class GraphTraversalEngine:
                 p_obj = record["p"]
                 hop_len = record["hop_length"]
 
-                raw_nodes = p_obj.nodes
-                raw_rels = p_obj.relationships
+                if hasattr(p_obj, "nodes"):
+                    raw_nodes = p_obj.nodes
+                    raw_rels = p_obj.relationships
+                elif isinstance(p_obj, list):
+                    raw_nodes = [p_obj[i] for i in range(0, len(p_obj), 2)]
+                    raw_rels = [p_obj[i] for i in range(1, len(p_obj), 2)]
+                else:
+                    continue
 
                 allowed = True
                 for n in raw_nodes:

@@ -366,8 +366,7 @@ class MockGraphStore:
         return None
 
 
-@pytest.fixture
-def graph_fixture():
+def build_graph_fixture():
     """Builds a realistic software & policy knowledge graph fixture."""
     nodes = {
         "urn:service:local:auth_service": {
@@ -465,6 +464,11 @@ def graph_fixture():
     ]
 
     return MockGraphStore(nodes, edges)
+
+
+@pytest.fixture
+def graph_fixture():
+    return build_graph_fixture()
 
 
 # ──────────────────────────────────────────────────────────────────────────────

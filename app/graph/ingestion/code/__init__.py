@@ -13,3 +13,4 @@ from app.graph.ingestion.code.identifiers import (
 from app.graph.ingestion.code.scanner import scan_repository, DiscoveredFile
 from app.graph.ingestion.code.parser import parse_python_file, ParseResult
 from app.graph.ingestion.code.resolver import SymbolResolver, ResolvedRelationship, UnresolvedReference
+from app.graph.ingestion.code.git_source import is_git_url, clone_repository, cleanup_cloned_repo

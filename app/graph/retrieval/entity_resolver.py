@@ -93,9 +93,11 @@ class EntityResolver:
                         EntityCandidate(
                             urn=node["id"],
                             label=label,
-                            name=node.get("name", m),
+                            name=node.get("name") or node.get("title") or node.get("code") or m,
                             qualified_name=node.get("qualified_name"),
-                            file_path=node.get("file_path") or node.get("rel_path"),
+                            file_path=node.get("file_path") or node.get("path"),
+                            project_urn=node.get("project_id") or node.get("project_urn"),
+                            repo_urn=node.get("repo_id") or node.get("repo_urn"),
                             match_reason="exact_urn",
                         )
                     ],
@@ -128,7 +130,17 @@ class EntityResolver:
             )
 
         # Exact match filtering
-        exact_matches = [c for c in candidates if c.match_reason in ("exact_qualified_name", "exact_name", "exact_route", "exact_file_path")]
+        exact_matches = [
+            c for c in candidates
+            if c.match_reason in (
+                "exact_qualified_name",
+                "exact_name",
+                "exact_code",
+                "exact_title",
+                "exact_route",
+                "exact_file_path",
+            )
+        ]
 
         # If exactly one exact match exists
         if len(exact_matches) == 1:
@@ -219,8 +231,12 @@ class EntityResolver:
             n.name = $mention OR
             n.route = $mention OR
             n.file_path = $mention OR
-            n.rel_path = $mention OR
-            toLower(n.name) = toLower($mention)
+            n.path = $mention OR
+            n.code = $mention OR
+            n.title = $mention OR
+            toLower(n.name) = toLower($mention) OR
+            toLower(n.title) = toLower($mention) OR
+            toLower(n.code) = toLower($mention)
         )
         {type_clauses}
         RETURN n, labels(n) AS labels
@@ -242,34 +258,51 @@ class EntityResolver:
 
                 # Scope check
                 if scope_project_urn:
-                    node_proj = node.get("project_urn") or node.get("provenance_source_project_id")
+                    node_proj = node.get("project_id") or node.get("project_urn") or node.get("provenance_source_project_id")
                     if node_proj and node_proj != scope_project_urn:
                         continue
                 if scope_repo_urn:
-                    node_repo = node.get("repo_urn") or node.get("provenance_source_repo_id")
+                    node_repo = node.get("repo_id") or node.get("repo_urn") or node.get("provenance_source_repo_id")
                     if node_repo and node_repo != scope_repo_urn:
                         continue
 
                 label = labels[0] if labels else "Unknown"
+                node_name = node.get("name") or node.get("title") or node.get("code") or ""
+                node_path = node.get("file_path") or node.get("path")
+                node_proj = node.get("project_id") or node.get("project_urn")
+                node_repo = node.get("repo_id") or node.get("repo_urn")
+
                 reason = "exact_name"
-                if node.get("qualified_name") == mention:
+                if node.get("id") == mention:
+                    reason = "exact_urn"
+                elif node.get("qualified_name") == mention:
                     reason = "exact_qualified_name"
+                elif node.get("name") == mention:
+                    reason = "exact_name"
+                elif node.get("code") == mention:
+                    reason = "exact_code"
+                elif node.get("title") == mention:
+                    reason = "exact_title"
                 elif node.get("route") == mention:
                     reason = "exact_route"
-                elif node.get("file_path") == mention or node.get("rel_path") == mention:
+                elif node_path == mention:
                     reason = "exact_file_path"
                 elif (node.get("name") or "").lower() == mention.lower():
                     reason = "case_insensitive_name"
+                elif (node.get("title") or "").lower() == mention.lower():
+                    reason = "case_insensitive_title"
+                elif (node.get("code") or "").lower() == mention.lower():
+                    reason = "case_insensitive_code"
 
                 candidates.append(
                     EntityCandidate(
                         urn=node["id"],
                         label=label,
-                        name=node.get("name", ""),
+                        name=node_name,
                         qualified_name=node.get("qualified_name"),
-                        file_path=node.get("file_path") or node.get("rel_path"),
-                        project_urn=node.get("project_urn"),
-                        repo_urn=node.get("repo_urn"),
+                        file_path=node_path,
+                        project_urn=node_proj,
+                        repo_urn=node_repo,
                         match_reason=reason,
                     )
                 )
@@ -288,7 +321,12 @@ class EntityResolver:
         """
         cypher = """
         MATCH (n)
-        WHERE (toLower(n.name) CONTAINS toLower($mention) OR toLower(n.id) CONTAINS toLower($mention))
+        WHERE (
+            toLower(n.name) CONTAINS toLower($mention) OR
+            toLower(n.title) CONTAINS toLower($mention) OR
+            toLower(n.code) CONTAINS toLower($mention) OR
+            toLower(n.id) CONTAINS toLower($mention)
+        )
         RETURN n, labels(n) AS labels
         LIMIT 5
         """
@@ -306,9 +344,11 @@ class EntityResolver:
                     EntityCandidate(
                         urn=node["id"],
                         label=label,
-                        name=node.get("name", ""),
+                        name=node.get("name") or node.get("title") or node.get("code") or "",
                         qualified_name=node.get("qualified_name"),
-                        file_path=node.get("file_path") or node.get("rel_path"),
+                        file_path=node.get("file_path") or node.get("path"),
+                        project_urn=node.get("project_id") or node.get("project_urn"),
+                        repo_urn=node.get("repo_id") or node.get("repo_urn"),
                         match_reason="substring_candidate",
                     )
                 )

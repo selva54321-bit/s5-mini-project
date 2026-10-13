@@ -21,6 +21,7 @@ from app.graph.ingestion.code.identifiers import (
 from app.graph.ingestion.code.scanner import scan_repository, DiscoveredFile
 from app.graph.ingestion.code.parser import parse_python_file, ParseResult
 from app.graph.ingestion.code.resolver import SymbolResolver, ResolvedRelationship
+from app.graph.ingestion.code.git_source import is_git_url, clone_repository, cleanup_cloned_repo, GitSourceError
 
 logger = logging.getLogger("graph.code_pipeline")
 if not logger.handlers:
@@ -65,15 +66,40 @@ def ingest_repository(
     project_id: Optional[str] = None,
     write_to_db: bool = True,
     store: Optional[GraphStore] = None,
+    branch: Optional[str] = None,
+    cleanup_after: bool = True,
 ) -> IngestionSummary:
     """
     Main programmatic entrypoint for scanning and ingesting a code repository into the graph.
+
+    Accepts either a local directory path or a remote git URL (HTTPS/SSH).
+    When a git URL is provided, the repository is cloned to a temporary directory,
+    ingested, and optionally cleaned up after completion.
     """
     start_time = time.time()
-    abs_repo_path = os.path.abspath(repo_path)
-    name = repo_name or os.path.basename(abs_repo_path)
-    repo_urn = build_repo_urn(name, org=org, provider=provider)
+    cloned_path = None  # Track if we cloned, for cleanup
 
+    # Handle git URLs: clone to local temp directory
+    if is_git_url(repo_path):
+        logger.info(f"Detected git URL: {repo_path}")
+        try:
+            cloned_path, auto_name, auto_org, auto_provider = clone_repository(
+                git_url=repo_path, branch=branch,
+            )
+            abs_repo_path = cloned_path
+            name = repo_name or auto_name
+            org = auto_org if org == "local" else org
+            provider = auto_provider
+        except GitSourceError as e:
+            summary = IngestionSummary(repo_urn=f"urn:repo:git:{org}:{repo_name or 'unknown'}")
+            summary.errors.append(f"Git clone failed: {e}")
+            summary.duration_seconds = time.time() - start_time
+            return summary
+    else:
+        abs_repo_path = os.path.abspath(repo_path)
+        name = repo_name or os.path.basename(abs_repo_path)
+
+    repo_urn = build_repo_urn(name, org=org, provider=provider)
     summary = IngestionSummary(repo_urn=repo_urn)
     logger.info(f"Starting code ingestion for repository: '{name}' (URN: {repo_urn}) at '{abs_repo_path}'")
 
@@ -255,15 +281,25 @@ def ingest_repository(
         f"{sum(summary.nodes_created_or_updated.values())} nodes, "
         f"{sum(summary.relationships_created_or_updated.values())} relationships."
     )
+
+    # Cleanup cloned repository if applicable
+    if cloned_path and cleanup_after:
+        try:
+            cleanup_cloned_repo(cloned_path)
+        except Exception as e:
+            logger.warning(f"Failed to cleanup cloned repo at {cloned_path}: {e}")
+
     return summary
 
 
 def main():
     parser = argparse.ArgumentParser(description="Ingest a code repository into the Neo4j Knowledge Graph.")
-    parser.add_argument("repo_path", help="Local directory path of repository to ingest.")
+    parser.add_argument("repo_path", help="Local directory path or remote git URL (HTTPS/SSH) of repository to ingest.")
     parser.add_argument("--repo-name", help="Repository name override.")
     parser.add_argument("--org", default="local", help="Organization slug.")
+    parser.add_argument("--branch", default=None, help="Git branch or tag to checkout (only for git URLs).")
     parser.add_argument("--no-db", action="store_true", help="Perform extraction without writing to Neo4j.")
+    parser.add_argument("--keep-clone", action="store_true", help="Do not delete cloned repo after ingestion.")
     args = parser.parse_args()
 
     summary = ingest_repository(
@@ -271,6 +307,8 @@ def main():
         repo_name=args.repo_name,
         org=args.org,
         write_to_db=not args.no_db,
+        branch=args.branch,
+        cleanup_after=not args.keep_clone,
     )
 
     print("\n" + "=" * 60)
