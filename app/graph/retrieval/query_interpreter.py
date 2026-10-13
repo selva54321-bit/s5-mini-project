@@ -174,6 +174,28 @@ class QueryInterpreter:
             )
 
         # 9. Architecture Component Lookup
+        # API/endpoints scoped with "in <repository>" are repository questions,
+        # not architecture questions.  This also tolerates natural phrasing such
+        # as "in eqrev what weather API is used".
+        if any(term in q_lower for term in ("api", "endpoint")):
+            scoped_repo = re.search(
+                r"\bin\s+(?:the\s+)?(?:repo(?:sitory)?\s+)?[`'\"]*([A-Za-z0-9_.-]+)[`'\"]*",
+                query,
+                re.IGNORECASE,
+            )
+            if scoped_repo:
+                repo_name = scoped_repo.group(1).strip(" ?.,;")
+                if repo_name.lower() not in {"the", "project", "repository", "repo", "codebase"}:
+                    return RetrievalSpec(
+                        intent=QueryIntent.REPOSITORY_LOOKUP,
+                        entity_mentions=[repo_name],
+                        direction=TraversalDirection.OUTGOING,
+                        relationship_types=["CONTAINS", "EXPOSES"],
+                        entity_types=["Repository"],
+                        max_depth=2,
+                        max_nodes=100,
+                    )
+
         if any(kw in q_lower for kw in ["architecture", "component", "service", "tier", "database", "api route", "exposes"]):
             mentions = self._extract_entity_mentions(query)
             return RetrievalSpec(
@@ -309,6 +331,7 @@ class QueryInterpreter:
             "about", "tell", "please", "give", "provide", "from", "with", "into",
             "the", "are", "files", "file", "repo", "repository", "project",
             "codebase", "structure", "contents", "modules", "exist",
+            "in", "is", "used", "here", "api", "apis", "endpoint", "endpoints",
         }
         candidate_tokens = re.findall(r"\b([A-Z][a-zA-Z0-9]+|[a-z0-9]+_[a-z0-9_]+)\b", text)
         for t in candidate_tokens:

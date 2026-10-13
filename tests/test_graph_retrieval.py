@@ -382,6 +382,14 @@ def build_graph_fixture():
             "label": "Repository",
             "project_urn": "urn:project:local:auth_proj",
         },
+        "urn:api:local:auth_repo:GET:/health": {
+            "id": "urn:api:local:auth_repo:GET:/health",
+            "route": "/health",
+            "method": "GET",
+            "framework": "FastAPI",
+            "label": "API",
+            "repo_urn": "urn:repo:local:auth_repo",
+        },
         "urn:service:local:auth_service": {
             "id": "urn:service:local:auth_service",
             "name": "AuthService",
@@ -466,6 +474,7 @@ def build_graph_fixture():
     }
 
     edges = [
+        {"source_id": "urn:repo:local:auth_repo", "target_id": "urn:api:local:auth_repo:GET:/health", "type": "EXPOSES"},
         {"source_id": "urn:repo:local:auth_repo", "target_id": "urn:code:file:auth_repo:auth/routes.py", "type": "CONTAINS"},
         {"source_id": "urn:service:local:auth_service", "target_id": "urn:code:file:auth_repo:auth/routes.py", "type": "CONTAINS"},
         {"source_id": "urn:code:file:auth_repo:auth/routes.py", "target_id": "urn:code:fn:auth_repo:auth/routes.py:login_endpoint", "type": "CONTAINS"},
@@ -533,6 +542,20 @@ def test_repository_lookup_resolves_a_single_accessible_repository(graph_fixture
     assert result.ambiguities == []
     assert [node.name for node in result.starting_entities] == ["auth_repo"]
     assert any(node.name == "routes.py" for node in result.nodes.values())
+
+
+def test_api_question_scoped_to_repository_uses_repository_lookup():
+    spec = QueryInterpreter().interpret("In eqrev, what weather API is used here?")
+
+    assert spec.intent == QueryIntent.REPOSITORY_LOOKUP
+    assert spec.entity_mentions == ["eqrev"]
+    assert set(spec.relationship_types) == {"CONTAINS", "EXPOSES"}
+
+
+def test_repository_lookup_includes_exposed_api_nodes(graph_fixture):
+    result = GraphRetriever(store=graph_fixture).retrieve("What API endpoints are in auth_repo?")
+
+    assert any(node.label == "API" and node.name == "/health" for node in result.nodes.values())
 
 
 def test_query_spec_schema_validation():

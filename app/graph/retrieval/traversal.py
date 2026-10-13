@@ -46,7 +46,13 @@ def _extract_node_from_record(node_dict: Dict[str, Any], labels: List[str], hop:
     """Extracts a RetrievedNode with provenance details from Neo4j record dictionary."""
     node_id = str(node_dict.get("id", ""))
     primary_label = labels[0] if labels else "Unknown"
-    name = str(node_dict.get("name") or node_dict.get("title") or node_dict.get("code") or node_id)
+    name = str(
+        node_dict.get("name")
+        or node_dict.get("title")
+        or node_dict.get("code")
+        or node_dict.get("route")
+        or node_id
+    )
 
     # Provenance fields
     p_type = node_dict.get("provenance_provenance_type") or node_dict.get("provenance_type")

@@ -424,7 +424,8 @@ class GraphRetriever:
             neighbors = self.traversal_engine.get_direct_neighbors(
                 source_id=start.id,
                 direction=TraversalDirection.OUTGOING,
-                rel_types=["CONTAINS"],
+                # Repositories contain files and may expose API nodes directly.
+                rel_types=["CONTAINS", "EXPOSES"],
                 limit=spec.max_nodes,
                 context=ctx,
             )
