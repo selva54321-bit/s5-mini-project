@@ -26,6 +26,7 @@ class QueryIntent(str, Enum):
     ARCHITECTURE_LOOKUP = "architecture_lookup"
     POLICY_LOOKUP = "policy_lookup"
     SECURITY_REQUIREMENT_LOOKUP = "security_requirement_lookup"
+    REPOSITORY_LOOKUP = "repository_lookup"
 
 
 class TraversalDirection(str, Enum):

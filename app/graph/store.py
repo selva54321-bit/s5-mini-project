@@ -97,6 +97,20 @@ class GraphStore:
 
         return self.db.execute_read(_work)
 
+    def list_nodes_by_label(self, label: str, limit: int = 100) -> List[Dict[str, Any]]:
+        """Returns a bounded collection of nodes for an approved label."""
+        valid_label = validate_node_label(label)
+        bounded_limit = max(1, min(limit, 200))
+        cypher = f"MATCH (n:{valid_label}) RETURN n, labels(n) AS labels ORDER BY n.name, n.id LIMIT $limit"
+
+        def _work(tx):
+            return [
+                {**dict(record["n"]), "_labels": record["labels"]}
+                for record in tx.run(cypher, limit=bounded_limit)
+            ]
+
+        return self.db.execute_read(_work)
+
     def update_node(
         self,
         node_id: str,

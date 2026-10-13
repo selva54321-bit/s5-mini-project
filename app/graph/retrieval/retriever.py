@@ -75,6 +75,35 @@ class GraphRetriever:
 
         result = RetrievalResult(intent=spec.intent)
 
+        # A question such as "show me the project" has no repository name.  Do
+        # not mistake the generic word "project" for a graph entity or merge
+        # data from multiple repositories.  Resolve a sole accessible repository
+        # automatically; otherwise return an explicit ambiguity for the caller.
+        if spec.intent == QueryIntent.REPOSITORY_LOOKUP and not spec.entity_mentions:
+            repositories = self.store.list_nodes_by_label("Repository", limit=spec.max_nodes)
+            accessible_repositories = [
+                repo for repo in repositories
+                if self.access_controller.can_access_node(repo, ctx)
+            ]
+            if len(accessible_repositories) == 1:
+                spec.entity_mentions = [accessible_repositories[0]["id"]]
+            elif len(accessible_repositories) > 1:
+                result.ambiguities.append({
+                    "mention": "repository",
+                    "candidates": [
+                        {"urn": repo["id"], "name": repo.get("name", repo["id"])}
+                        for repo in accessible_repositories
+                    ],
+                    "message": "Multiple repositories are available; specify a repository name or URN.",
+                })
+                result.warnings.append(
+                    "Multiple repositories are available. Specify one, for example 'eqrev' or 'app'."
+                )
+                return result
+            else:
+                result.warnings.append("No accessible repositories were found in the knowledge graph.")
+                return result
+
         # 2. Resolve primary entity mentions
         resolved_starts: List[RetrievedNode] = []
         for mention in spec.entity_mentions:
@@ -133,6 +162,9 @@ class GraphRetriever:
 
         elif spec.intent in (QueryIntent.ARCHITECTURE_LOOKUP, QueryIntent.POLICY_LOOKUP, QueryIntent.SECURITY_REQUIREMENT_LOOKUP):
             self._retrieve_architecture_and_policies(resolved_starts, spec, result, ctx)
+
+        elif spec.intent == QueryIntent.REPOSITORY_LOOKUP:
+            self._retrieve_repository_contents(resolved_starts, spec, result, ctx)
 
         # 4. Enforce result truncation constraints
         if len(result.nodes) > spec.max_nodes:
@@ -375,3 +407,60 @@ class GraphRetriever:
                     confidence=float(item["rel_props"].get("confidence") or 1.0),
                 )
                 result.add_relationship(edge)
+
+    def _retrieve_repository_contents(
+        self,
+        starts: List[RetrievedNode],
+        spec: RetrievalSpec,
+        result: RetrievalResult,
+        ctx: AccessControlContext,
+    ) -> None:
+        """
+        Retrieves all entities contained within a Repository by traversing
+        CONTAINS relationships outward (Repo -> Files -> Classes/Functions/APIs).
+        """
+        for start in starts:
+            # Depth 1: Repo -> Files
+            neighbors = self.traversal_engine.get_direct_neighbors(
+                source_id=start.id,
+                direction=TraversalDirection.OUTGOING,
+                rel_types=["CONTAINS"],
+                limit=spec.max_nodes,
+                context=ctx,
+            )
+            for item in neighbors:
+                result.add_node(item["target"])
+                edge = RetrievedEdge(
+                    source_id=item["rel_source_id"],
+                    target_id=item["rel_target_id"],
+                    rel_type=item["rel_type"],
+                    properties=item["rel_props"],
+                    direction="OUTGOING",
+                    hop=1,
+                    provenance_type=item["rel_props"].get("provenance_type"),
+                    confidence=float(item["rel_props"].get("confidence") or 1.0),
+                )
+                result.add_relationship(edge)
+
+                # Depth 2: Files -> Classes/Functions/APIs
+                if spec.max_depth >= 2:
+                    child_neighbors = self.traversal_engine.get_direct_neighbors(
+                        source_id=item["target"].id,
+                        direction=TraversalDirection.OUTGOING,
+                        rel_types=["CONTAINS", "EXPOSES"],
+                        limit=spec.max_nodes,
+                        context=ctx,
+                    )
+                    for child_item in child_neighbors:
+                        result.add_node(child_item["target"])
+                        child_edge = RetrievedEdge(
+                            source_id=child_item["rel_source_id"],
+                            target_id=child_item["rel_target_id"],
+                            rel_type=child_item["rel_type"],
+                            properties=child_item["rel_props"],
+                            direction="OUTGOING",
+                            hop=2,
+                            provenance_type=child_item["rel_props"].get("provenance_type"),
+                            confidence=float(child_item["rel_props"].get("confidence") or 1.0),
+                        )
+                        result.add_relationship(child_edge)

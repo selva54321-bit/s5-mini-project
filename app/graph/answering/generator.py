@@ -6,10 +6,17 @@ and LLM Gateway synthesis with strict anti-hallucination controls.
 
 import time
 import logging
+import os
 from typing import Optional, Dict, Any, List
-import logfire
 
 from app.config import settings
+
+# Logfire tracing is optional in local CLI use.  Suppress only the framework's
+# no-configuration warning; enabled deployments retain their normal setup.
+if not settings.LOGFIRE_ENABLED:
+    os.environ.setdefault("LOGFIRE_IGNORE_NO_CONFIG", "1")
+
+import logfire
 from app.gateway.client import get_langchain_llm, extract_cache_status
 from app.graph.retrieval.retriever import GraphRetriever
 from app.graph.retrieval.context_builder import GraphContextBuilder

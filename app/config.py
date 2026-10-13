@@ -5,6 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 class Settings:
 
+    # Tracing is opt-in.  When it is not configured, graph queries should still
+    # run without Logfire emitting a warning for every answer.
+    LOGFIRE_ENABLED = os.getenv("LOGFIRE_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL = "gemini-2.5-flash"
     

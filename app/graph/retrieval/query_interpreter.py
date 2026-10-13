@@ -184,7 +184,52 @@ class QueryInterpreter:
                 max_depth=2,
             )
 
-        # 10. Entity Lookup
+        # 10. Repository Lookup (files in X repo, structure of X, what's in repository X)
+        repo_keywords = ["repository", "repo", "codebase", "project"]
+        repo_content_keywords = [
+            "files in", "files are in", "structure of", "what's in", "contents of",
+            "modules in", "classes in", "functions in", "endpoints in", "apis in",
+            "functions exist in", "classes exist in", "endpoints exist in",
+            "what functions", "what classes", "what apis", "what endpoints",
+            "what api", "api endpoints", "show me", "tell me about repo", "list all",
+        ]
+        if any(kw in q_lower for kw in repo_content_keywords) or (
+            any(kw in q_lower for kw in repo_keywords) and any(kw in q_lower for kw in ["what", "show", "list", "describe", "tell"])
+        ):
+            # Generic scope words are not graph entities.  Leave the scope empty
+            # so the retriever can identify the accessible repositories instead.
+            generic_scope_terms = {"project", "repository", "repo", "codebase", "endpoints", "apis", "api"}
+            mentions = [
+                mention for mention in self._extract_entity_mentions(query)
+                if mention.lower() not in generic_scope_terms
+            ]
+            # Also try to extract repo name from common patterns
+            repo_patterns = [
+                r"(?:files?|functions?|classes|endpoints?|apis?)\s+(?:in|are\s+in|exist\s+in|of)\s+(?:the\s+)?(?:repo(?:sitory)?\s+)?[`'\"]*([A-Za-z0-9_\-\.]+)[`'\"]*",
+                r"(?:structure|contents?)\s+of\s+(?:the\s+)?(?:repo(?:sitory)?\s+)?[`'\"]*([A-Za-z0-9_\-\.]+)[`'\"]*",
+                r"(?:repo(?:sitory)?|codebase|project)\s+[`'\"]*([A-Za-z0-9_\-\.]+)[`'\"]*",
+                r"[`'\"]*([A-Za-z0-9_\-\.]+)[`'\"]*\s+(?:repo(?:sitory)?|codebase|project)",
+                r"(?:what's|what\s+is)\s+in\s+[`'\"]*([A-Za-z0-9_\-\.]+)[`'\"]*",
+                r"in\s+[`'\"]*([A-Za-z0-9_\-\.]+)[`'\"]*\s*\??$",
+            ]
+            for pat in repo_patterns:
+                repo_match = re.search(pat, query, re.IGNORECASE)
+                if repo_match:
+                    repo_name = repo_match.group(1).strip(" ?.,;")
+                    if repo_name and repo_name.lower() not in {"the", "a", "this", "my", "our"} and repo_name not in mentions:
+                        mentions.insert(0, repo_name)
+                        break
+            return RetrievalSpec(
+                intent=QueryIntent.REPOSITORY_LOOKUP,
+                entity_mentions=mentions,
+                direction=TraversalDirection.OUTGOING,
+                relationship_types=["CONTAINS"],
+                entity_types=["Repository"],
+                max_depth=2,
+                max_nodes=100,
+            )
+
+        # 11. Entity Lookup
         mentions = self._extract_entity_mentions(query)
         if mentions:
             return RetrievalSpec(
@@ -255,12 +300,15 @@ class QueryInterpreter:
             if len(clean_r) > 2 and clean_r not in mentions:
                 mentions.append(clean_r)
 
-        # 7. Fallback: Identifier-like tokens (PascalCase or snake_case with > 3 chars)
+        # 7. Fallback: Identifier-like tokens (PascalCase, snake_case, or standalone names > 2 chars)
         stopwords = {
             "what", "which", "where", "when", "why", "who", "whom", "whose", "how",
             "does", "have", "this", "that", "these", "those", "show", "find", "list",
             "lookup", "describe", "between", "path", "connection", "impact", "tests",
             "calls", "depend", "dependencies", "service", "function", "class",
+            "about", "tell", "please", "give", "provide", "from", "with", "into",
+            "the", "are", "files", "file", "repo", "repository", "project",
+            "codebase", "structure", "contents", "modules", "exist",
         }
         candidate_tokens = re.findall(r"\b([A-Z][a-zA-Z0-9]+|[a-z0-9]+_[a-z0-9_]+)\b", text)
         for t in candidate_tokens:

@@ -98,7 +98,7 @@ def test_health_check_healthy():
     mock_driver = MagicMock()
     mock_session = MagicMock()
     mock_record = {"name": "Neo4j Kernel", "version": "5.26.0", "edition": "enterprise"}
-    mock_session.run.return_value.single.return_value = mock_record
+    mock_session.run.return_value.__iter__.return_value = iter([mock_record])
 
     mock_driver.session.return_value = mock_session
     mgr._driver = mock_driver

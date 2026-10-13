@@ -167,16 +167,9 @@ class Neo4jConnectionManager:
             else:
                 with self.session() as session:
                     result = session.run("CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition")
-                    record = None
-                    if hasattr(result, "single"):
-                        try:
-                            record = result.single()
-                        except Exception:
-                            records = list(result)
-                            record = records[0] if records else None
-                    else:
-                        records = list(result)
-                        record = records[0] if records else None
+                    # Aura may return more than one component record.  `.single()`
+                    # warns in that case, while the health check only needs one.
+                    record = next(iter(result), None)
                     version = record["version"] if record else "unknown"
                     edition = record["edition"] if record else "unknown"
 

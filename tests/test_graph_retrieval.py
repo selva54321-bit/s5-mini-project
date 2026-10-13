@@ -365,10 +365,23 @@ class MockGraphStore:
             return d
         return None
 
+    def list_nodes_by_label(self, label: str, limit: int = 100):
+        return [
+            {**node, "_labels": [node.get("label", "Node")]}
+            for node in self.nodes.values()
+            if node.get("label") == label
+        ][:limit]
+
 
 def build_graph_fixture():
     """Builds a realistic software & policy knowledge graph fixture."""
     nodes = {
+        "urn:repo:local:auth_repo": {
+            "id": "urn:repo:local:auth_repo",
+            "name": "auth_repo",
+            "label": "Repository",
+            "project_urn": "urn:project:local:auth_proj",
+        },
         "urn:service:local:auth_service": {
             "id": "urn:service:local:auth_service",
             "name": "AuthService",
@@ -453,6 +466,7 @@ def build_graph_fixture():
     }
 
     edges = [
+        {"source_id": "urn:repo:local:auth_repo", "target_id": "urn:code:file:auth_repo:auth/routes.py", "type": "CONTAINS"},
         {"source_id": "urn:service:local:auth_service", "target_id": "urn:code:file:auth_repo:auth/routes.py", "type": "CONTAINS"},
         {"source_id": "urn:code:file:auth_repo:auth/routes.py", "target_id": "urn:code:fn:auth_repo:auth/routes.py:login_endpoint", "type": "CONTAINS"},
         {"source_id": "urn:code:fn:auth_repo:auth/routes.py:login_endpoint", "target_id": "urn:code:fn:auth_repo:auth/security.py:authenticate", "type": "CALLS"},
@@ -504,6 +518,21 @@ def test_query_interpreter_intents():
     spec5 = interpreter.interpret("What policies govern AuthService?")
     assert spec5.intent == QueryIntent.POLICY_LOOKUP
     assert "AuthService" in spec5.entity_mentions
+
+
+def test_query_interpreter_does_not_treat_generic_project_as_entity():
+    spec = QueryInterpreter().interpret("Show me the project")
+
+    assert spec.intent == QueryIntent.REPOSITORY_LOOKUP
+    assert spec.entity_mentions == []
+
+
+def test_repository_lookup_resolves_a_single_accessible_repository(graph_fixture):
+    result = GraphRetriever(store=graph_fixture).retrieve("Show me the project")
+
+    assert result.ambiguities == []
+    assert [node.name for node in result.starting_entities] == ["auth_repo"]
+    assert any(node.name == "routes.py" for node in result.nodes.values())
 
 
 def test_query_spec_schema_validation():
