@@ -96,6 +96,18 @@ def create_app() -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Unable to create project.") from exc
 
+    @app.delete("/api/projects/{project_id:path}")
+    def delete_project(
+        project_id: str,
+        service: ProjectIngestionService = Depends(get_project_ingestion_service),
+    ) -> dict[str, Any]:
+        try:
+            return service.delete_project(project_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Unable to delete project.") from exc
+
     @app.post("/api/ingest/repository")
     def ingest_project_repository(
         request: RepositoryIngestionRequest,

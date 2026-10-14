@@ -177,6 +177,34 @@ class GraphStore:
 
         return self.db.execute_write(_work)
 
+    def delete_project_scope(self, project_id: str) -> int:
+        """Delete one project's private graph data, leaving shared nodes intact.
+
+        Repository-owned source nodes use ``repo_id`` while document-owned nodes
+        use ``project_id``.  Packages deliberately have neither property, so a
+        package shared by another project is never selected for deletion.
+        """
+        valid_project_id = validate_urn_identifier(project_id)
+        cypher = """
+        MATCH (project:Project {id: $project_id})
+        OPTIONAL MATCH (repo:Repository {project_id: $project_id})
+        WITH collect(DISTINCT repo.id) AS repo_ids
+        MATCH (node)
+        WHERE node.id = $project_id
+           OR node.project_id = $project_id
+           OR node.repo_id IN repo_ids
+        WITH collect(node) AS nodes
+        UNWIND nodes AS node
+        DETACH DELETE node
+        RETURN count(node) AS deleted_count
+        """
+
+        def _work(tx):
+            record = tx.run(cypher, project_id=valid_project_id).single()
+            return int(record["deleted_count"]) if record else 0
+
+        return self.db.execute_write(_work)
+
     # ──────────────────────────────────────────────────────────────────────────
     # Relationship Operations
     # ──────────────────────────────────────────────────────────────────────────

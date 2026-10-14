@@ -24,6 +24,7 @@ class ParsedImport:
     alias: Optional[str]
     is_from_import: bool
     line_number: int
+    level: int = 0
 
 
 @dataclass
@@ -58,6 +59,7 @@ class ParsedFunction:
     docstring: Optional[str]
     decorators: List[str]
     is_test: bool
+    source_excerpt: str
 
 
 @dataclass
@@ -88,6 +90,7 @@ class ParseResult:
     apis: List[ParsedAPI] = field(default_factory=list)
     tests: List[ParsedFunction] = field(default_factory=list)
     db_operations: List[Dict[str, Any]] = field(default_factory=list)
+    workflow_nodes: List[str] = field(default_factory=list)
     error_message: Optional[str] = None
 
 
@@ -97,10 +100,11 @@ class CodeASTVisitor(ast.NodeVisitor):
     Tracks lexical scope stacks (classes, functions) to produce fully qualified symbol paths.
     """
 
-    def __init__(self, file_urn: str, repo_urn: str, rel_path: str):
+    def __init__(self, file_urn: str, repo_urn: str, rel_path: str, source_code: str):
         self.file_urn = file_urn
         self.repo_urn = repo_urn
         self.rel_path = rel_path
+        self.source_code = source_code
 
         self.scope_stack: List[str] = []
         self.class_urn_stack: List[str] = []
@@ -112,6 +116,8 @@ class CodeASTVisitor(ast.NodeVisitor):
         self.apis: List[ParsedAPI] = []
         self.tests: List[ParsedFunction] = []
         self.db_operations: List[Dict[str, Any]] = []
+        self.stategraph_variables: Set[str] = set()
+        self.workflow_nodes: List[str] = []
 
     def current_caller_urn(self) -> str:
         """Returns the URN of the currently executing function, or file URN for module-level."""
@@ -130,6 +136,7 @@ class CodeASTVisitor(ast.NodeVisitor):
                     alias=alias.asname,
                     is_from_import=False,
                     line_number=node.lineno,
+                    level=0,
                 )
             )
         self.generic_visit(node)
@@ -144,6 +151,7 @@ class CodeASTVisitor(ast.NodeVisitor):
                     alias=alias.asname,
                     is_from_import=True,
                     line_number=node.lineno,
+                    level=node.level,
                 )
             )
         self.generic_visit(node)
@@ -208,7 +216,12 @@ class CodeASTVisitor(ast.NodeVisitor):
         parent_class_urn = self.class_urn_stack[-1] if is_method else None
 
         decorators = [self._decorator_to_str(d) for d in node.decorator_list]
-        params = [arg.arg for arg in node.args.args]
+        params = [arg.arg for arg in (list(node.args.posonlyargs) + list(node.args.args))]
+        if node.args.vararg:
+            params.append(f"*{node.args.vararg.arg}")
+        params.extend(arg.arg for arg in node.args.kwonlyargs)
+        if node.args.kwarg:
+            params.append(f"**{node.args.kwarg.arg}")
         is_test = func_name.startswith("test_") or "test" in self.rel_path.lower()
 
         parsed_func = ParsedFunction(
@@ -225,6 +238,9 @@ class CodeASTVisitor(ast.NodeVisitor):
             docstring=ast.get_docstring(node),
             decorators=decorators,
             is_test=is_test,
+            # Preserve a bounded, non-executed source excerpt so the graph can
+            # explain an API handler from retrieved evidence.
+            source_excerpt=(ast.get_source_segment(self.source_code, node) or "")[:4000],
         )
         self.functions.append(parsed_func)
 
@@ -240,6 +256,14 @@ class CodeASTVisitor(ast.NodeVisitor):
 
     # ── Function Calls ────────────────────────────────────────────────────────
 
+    def visit_Assign(self, node: ast.Assign):
+        """Track `workflow = StateGraph(...)` assignments without execution."""
+        if isinstance(node.value, ast.Call) and self._call_to_str(node.value.func).endswith("StateGraph"):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    self.stategraph_variables.add(target.id)
+        self.generic_visit(node)
+
     def visit_Call(self, node: ast.Call):
         callee_expr = self._call_to_str(node.func)
         if callee_expr:
@@ -251,6 +275,22 @@ class CodeASTVisitor(ast.NodeVisitor):
                     line_number=node.lineno,
                 )
             )
+
+            # LangGraph workflow definitions are code-level entities distinct
+            # from Python functions.  Capture literal add_node names so a
+            # repository question can report the actual workflow topology.
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "add_node"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in self.stategraph_variables
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                workflow_node = node.args[0].value
+                if workflow_node not in self.workflow_nodes:
+                    self.workflow_nodes.append(workflow_node)
 
             # Detect known database access expressions
             if any(term in callee_expr for term in ("query_points", "upsert", "execute_write", "execute_read", "execute")):
@@ -265,7 +305,7 @@ class CodeASTVisitor(ast.NodeVisitor):
     # ── Helper Extractors ─────────────────────────────────────────────────────
 
     def _detect_api_route(self, node, func_urn: str):
-        """Detects @app.get('/route'), @router.post('/route'), etc."""
+        """Detects FastAPI and Flask literal route decorators without execution."""
         for dec in node.decorator_list:
             if isinstance(dec, ast.Call):
                 attr_name = ""
@@ -274,21 +314,39 @@ class CodeASTVisitor(ast.NodeVisitor):
                 elif isinstance(dec.func, ast.Name):
                     attr_name = dec.func.id.upper()
 
+                if not dec.args or not isinstance(dec.args[0], ast.Constant) or not isinstance(dec.args[0].value, str):
+                    continue
+                route_path = dec.args[0].value
                 if attr_name in ("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"):
-                    # Check first argument for route string
-                    if dec.args and isinstance(dec.args[0], ast.Constant) and isinstance(dec.args[0].value, str):
-                        route_path = dec.args[0].value
-                        api_urn = build_api_urn(self.repo_urn, attr_name, route_path)
-                        self.apis.append(
-                            ParsedAPI(
-                                urn=api_urn,
-                                route=route_path,
-                                http_method=attr_name,
-                                handler_func_urn=func_urn,
-                                framework="FastAPI",
-                                line_number=node.lineno,
-                            )
-                        )
+                    methods, framework = [attr_name], "FastAPI"
+                elif attr_name in ("ROUTE", "API_ROUTE"):
+                    methods, framework = self._route_methods(dec), "Flask" if attr_name == "ROUTE" else "FastAPI"
+                else:
+                    continue
+                for method in methods:
+                    self.apis.append(ParsedAPI(
+                        urn=build_api_urn(self.repo_urn, method, route_path),
+                        route=route_path,
+                        http_method=method,
+                        handler_func_urn=func_urn,
+                        framework=framework,
+                        line_number=node.lineno,
+                    ))
+
+    @staticmethod
+    def _route_methods(decorator: ast.Call) -> List[str]:
+        """Return literal methods from Flask/FastAPI generic route decorators."""
+        allowed = {"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"}
+        for keyword in decorator.keywords:
+            if keyword.arg == "methods" and isinstance(keyword.value, (ast.List, ast.Tuple, ast.Set)):
+                methods = [
+                    item.value.upper()
+                    for item in keyword.value.elts
+                    if isinstance(item, ast.Constant) and isinstance(item.value, str) and item.value.upper() in allowed
+                ]
+                if methods:
+                    return methods
+        return ["GET"]
 
     def _decorator_to_str(self, dec) -> str:
         if isinstance(dec, ast.Name):
@@ -358,7 +416,12 @@ def parse_python_file(abs_path: str, rel_path: str, repo_urn: str) -> ParseResul
             error_message=f"AST parse error: {e}",
         )
 
-    visitor = CodeASTVisitor(file_urn=file_urn, repo_urn=repo_urn, rel_path=rel_path)
+    visitor = CodeASTVisitor(
+        file_urn=file_urn,
+        repo_urn=repo_urn,
+        rel_path=rel_path,
+        source_code=code,
+    )
     visitor.visit(tree)
 
     return ParseResult(
@@ -373,4 +436,5 @@ def parse_python_file(abs_path: str, rel_path: str, repo_urn: str) -> ParseResul
         apis=visitor.apis,
         tests=visitor.tests,
         db_operations=visitor.db_operations,
+        workflow_nodes=visitor.workflow_nodes,
     )

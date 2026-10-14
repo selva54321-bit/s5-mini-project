@@ -168,7 +168,7 @@ class GraphTraversalEngine:
 
         cypher = f"""
         MATCH p = {pattern}
-        WHERE none(n IN nodes(p)[1..] WHERE n.id = s.id)
+        WHERE all(n IN nodes(p) WHERE single(other IN nodes(p) WHERE other = n))
         RETURN p, length(p) AS hop_length
         ORDER BY hop_length ASC
         LIMIT $max_paths
@@ -206,18 +206,26 @@ class GraphTraversalEngine:
                     node_ret = _extract_node_from_record(dict(n), list(n.labels), hop=h_idx)
                     nodes_in_path.append(node_ret)
 
-                for r in raw_rels:
+                for edge_index, r in enumerate(raw_rels):
+                    source_dict = dict(r.start_node)
+                    target_dict = dict(r.end_node)
+                    if not self.access_controller.can_traverse_relationship(source_dict, r.type, target_dict, ctx):
+                        edges_in_path = []
+                        break
                     edge_ret = RetrievedEdge(
                         source_id=r.start_node["id"],
                         target_id=r.end_node["id"],
                         rel_type=r.type,
                         properties=dict(r),
-                        direction="OUTGOING" if r.start_node["id"] == valid_src else "INCOMING",
-                        hop=hop_len,
+                        direction="OUTGOING" if r.start_node["id"] == nodes_in_path[edge_index].id else "INCOMING",
+                        hop=edge_index + 1,
                         provenance_type=r.get("provenance_type"),
                         confidence=float(r.get("confidence") or 1.0),
                     )
                     edges_in_path.append(edge_ret)
+
+                if not edges_in_path:
+                    continue
 
                 # Format human readable summary
                 summary_parts = []
@@ -260,6 +268,7 @@ class GraphTraversalEngine:
         cypher = f"""
         MATCH (s {{id: $source_id}}), (t {{id: $target_id}})
         MATCH p = allShortestPaths((s)-[r{rel_clause}*..{bounded_depth}]-(t))
+        WHERE all(n IN nodes(p) WHERE single(other IN nodes(p) WHERE other = n))
         RETURN p, length(p) AS hop_length
         LIMIT $max_paths
         """
@@ -294,16 +303,20 @@ class GraphTraversalEngine:
                     continue
 
                 nodes_in_path = [_extract_node_from_record(dict(n), list(n.labels), hop=h_idx) for h_idx, n in enumerate(raw_nodes)]
-                edges_in_path = [
-                    RetrievedEdge(
+                edges_in_path = []
+                for edge_index, r in enumerate(raw_rels):
+                    if not self.access_controller.can_traverse_relationship(dict(r.start_node), r.type, dict(r.end_node), ctx):
+                        edges_in_path = []
+                        break
+                    edges_in_path.append(RetrievedEdge(
                         source_id=r.start_node["id"],
                         target_id=r.end_node["id"],
                         rel_type=r.type,
                         properties=dict(r),
-                        hop=hop_len,
-                    )
-                    for r in raw_rels
-                ]
+                        hop=edge_index + 1,
+                    ))
+                if not edges_in_path:
+                    continue
 
                 summary_parts = []
                 for s_idx in range(len(nodes_in_path)):
@@ -342,7 +355,7 @@ class GraphTraversalEngine:
         # Dependent components point to source: (dependent)-[:CALLS|IMPORTS|DEPENDS_ON]->(source)
         cypher = f"""
         MATCH p = (dependent)-[r:CALLS|IMPORTS|DEPENDS_ON*1..{bounded_depth}]->(s {{id: $source_id}})
-        WHERE none(n IN nodes(p)[..-1] WHERE n.id = s.id)
+        WHERE all(n IN nodes(p) WHERE single(other IN nodes(p) WHERE other = n))
         RETURN p, length(p) AS hop_length
         ORDER BY hop_length ASC
         LIMIT $max_paths
@@ -367,16 +380,20 @@ class GraphTraversalEngine:
                     continue
 
                 nodes_in_path = [_extract_node_from_record(dict(n), list(n.labels), hop=h_idx) for h_idx, n in enumerate(raw_nodes)]
-                edges_in_path = [
-                    RetrievedEdge(
+                edges_in_path = []
+                for edge_index, r in enumerate(raw_rels):
+                    if not self.access_controller.can_traverse_relationship(dict(r.start_node), r.type, dict(r.end_node), ctx):
+                        edges_in_path = []
+                        break
+                    edges_in_path.append(RetrievedEdge(
                         source_id=r.start_node["id"],
                         target_id=r.end_node["id"],
                         rel_type=r.type,
                         properties=dict(r),
-                        hop=hop_len,
-                    )
-                    for r in raw_rels
-                ]
+                        hop=edge_index + 1,
+                    ))
+                if not edges_in_path:
+                    continue
 
                 summary_parts = []
                 for s_idx in range(len(nodes_in_path)):

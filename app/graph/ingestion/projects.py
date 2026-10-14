@@ -54,6 +54,26 @@ class ProjectIngestionService:
     def list_projects(self) -> list[dict[str, Any]]:
         return self.store.list_nodes_by_label(NodeLabel.PROJECT.value, limit=100)
 
+    def delete_project(self, project_id: str) -> dict[str, Any]:
+        """Remove a project and all graph entities owned only by that project."""
+        project_id = validate_urn_identifier(project_id)
+        if not self.store.get_node(project_id, NodeLabel.PROJECT.value):
+            raise ValueError("Project does not exist.")
+
+        deleted_nodes = self.store.delete_project_scope(project_id)
+        project_dir = (self.upload_root.resolve() / project_id.rsplit(":", 1)[-1]).resolve()
+        upload_root = self.upload_root.resolve()
+        uploads_deleted = False
+        if project_dir.is_relative_to(upload_root) and project_dir.exists():
+            shutil.rmtree(project_dir)
+            uploads_deleted = True
+
+        return {
+            "project_id": project_id,
+            "deleted_nodes": deleted_nodes,
+            "uploads_deleted": uploads_deleted,
+        }
+
     def ingest_repository(
         self,
         project_id: str,

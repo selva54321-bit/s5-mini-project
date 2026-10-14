@@ -82,6 +82,9 @@ class SymbolResolver:
             clean_rel = pr.rel_path.removesuffix(".py").replace("\\", "/")
             dotted_mod = clean_rel.replace("/", ".")
             self.ctx.module_to_file[dotted_mod] = pr.rel_path
+            if dotted_mod.startswith("src."):
+                # Support the conventional src/ layout, whose imports omit src.
+                self.ctx.module_to_file[dotted_mod.removeprefix("src.")] = pr.rel_path
             if clean_rel.endswith("__init__"):
                 parent_mod = dotted_mod.removesuffix(".__init__")
                 self.ctx.module_to_file[parent_mod] = pr.rel_path
@@ -95,6 +98,19 @@ class SymbolResolver:
             for f in pr.functions:
                 self.ctx.func_map[f.urn] = f
                 self.ctx.file_symbols[(pr.file_urn, f.name)] = f.urn
+
+    def _resolve_import_module(self, pr: ParseResult, imp) -> Optional[str]:
+        """Resolve absolute and relative imports to a verified scanned module."""
+        module = imp.module
+        if imp.level:
+            current = pr.rel_path.removesuffix(".py").replace("/", ".")
+            package = current.split(".") if current.endswith(".__init__") else current.split(".")[:-1]
+            ascend = imp.level - 1
+            if ascend > len(package):
+                return None
+            base = package[:len(package) - ascend]
+            module = ".".join(base + ([imp.module] if imp.module else []))
+        return self.ctx.module_to_file.get(module)
 
     def resolve_all(self) -> Tuple[List[ResolvedRelationship], List[UnresolvedReference]]:
         """Executes resolution for containment, imports, inheritance, calls, APIs, and tests."""
@@ -168,7 +184,7 @@ class SymbolResolver:
     def _resolve_imports(self, pr: ParseResult):
         for imp in pr.imports:
             # Check if this import refers to an internal module
-            target_rel_path = self.ctx.module_to_file.get(imp.module)
+            target_rel_path = self._resolve_import_module(pr, imp)
             if target_rel_path:
                 target_file_urn = self.ctx.file_urn_map[target_rel_path]
                 self.relationships.append(
@@ -180,6 +196,7 @@ class SymbolResolver:
                             "line_number": imp.line_number,
                             "imported_name": imp.imported_name,
                             "alias": imp.alias,
+                            "relative_level": imp.level,
                         },
                         provenance={
                             "provenance_type": ProvenanceType.STATIC_AST.value,
@@ -219,7 +236,7 @@ class SymbolResolver:
                 if not target_urn:
                     for imp in pr.imports:
                         if imp.imported_name == base_name or (not imp.imported_name and imp.alias == base_name):
-                            target_rel = self.ctx.module_to_file.get(imp.module)
+                            target_rel = self._resolve_import_module(pr, imp)
                             if target_rel:
                                 target_file_urn = self.ctx.file_urn_map[target_rel]
                                 target_urn = self.ctx.file_symbols.get((target_file_urn, base_name))
@@ -265,11 +282,11 @@ class SymbolResolver:
             # Case C: Call to directly imported function (e.g. from x import y; y())
             if not target_urn and "." not in expr:
                 for imp in pr.imports:
-                    if imp.imported_name == expr:
-                        target_rel = self.ctx.module_to_file.get(imp.module)
+                    if imp.imported_name == expr or imp.alias == expr:
+                        target_rel = self._resolve_import_module(pr, imp)
                         if target_rel:
                             target_file_urn = self.ctx.file_urn_map[target_rel]
-                            target_urn = self.ctx.file_symbols.get((target_file_urn, expr))
+                            target_urn = self.ctx.file_symbols.get((target_file_urn, imp.imported_name or expr))
                         break
 
             # Case D: Module-qualified call (e.g. qdrant_service.search_enterprise_knowledge())
@@ -278,7 +295,7 @@ class SymbolResolver:
                 mod_alias, func_name = parts[0], parts[-1]
                 for imp in pr.imports:
                     if (imp.alias and imp.alias == mod_alias) or (not imp.alias and imp.module.endswith(mod_alias)):
-                        target_rel = self.ctx.module_to_file.get(imp.module)
+                        target_rel = self._resolve_import_module(pr, imp)
                         if target_rel:
                             target_file_urn = self.ctx.file_urn_map[target_rel]
                             target_urn = self.ctx.file_symbols.get((target_file_urn, func_name))

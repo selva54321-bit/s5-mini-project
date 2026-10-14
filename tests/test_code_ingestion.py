@@ -139,6 +139,24 @@ def test_find_user():
     assert service.execute() is True
 """
 
+SAMPLE_LANGGRAPH_CODE = """
+from langgraph.graph import StateGraph
+
+workflow = StateGraph(AgentState)
+workflow.add_node("planner", planner_node)
+workflow.add_node("executor", execution_node)
+workflow.add_node("response", response_node)
+"""
+
+SAMPLE_FLASK_CODE = """
+from flask import Flask
+app = Flask(__name__)
+
+@app.route("/items", methods=["GET", "POST"])
+def items(*args, page=1, **kwargs):
+    return {"page": page}
+"""
+
 def test_ast_parser_extracts_entities():
     repo_urn = build_repo_urn("test-repo")
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
@@ -166,6 +184,9 @@ def test_ast_parser_extracts_entities():
         assert "helper_func" in func_qnames
         assert "create_user_api" in func_qnames
         assert "test_find_user" in func_qnames
+
+        api_handler = next(fn for fn in res.functions if fn.name == "create_user_api")
+        assert "return helper_func(42)" in api_handler.source_excerpt
 
         # Verify Imports
         imported_mods = [imp.module for imp in res.imports]
@@ -196,6 +217,36 @@ def test_ast_parser_handles_syntax_error():
         res = parse_python_file(abs_path=temp_path, rel_path="broken.py", repo_urn=repo_urn)
         assert res.success is False
         assert "SyntaxError" in res.error_message
+    finally:
+        os.remove(temp_path)
+
+
+def test_ast_parser_extracts_langgraph_workflow_nodes():
+    repo_urn = build_repo_urn("test-repo")
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
+        f.write(SAMPLE_LANGGRAPH_CODE)
+        temp_path = f.name
+
+    try:
+        result = parse_python_file(temp_path, "agent/graph.py", repo_urn)
+        assert result.workflow_nodes == ["planner", "executor", "response"]
+    finally:
+        os.remove(temp_path)
+
+
+def test_ast_parser_extracts_flask_route_methods_and_rich_signature():
+    repo_urn = build_repo_urn("test-repo")
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
+        f.write(SAMPLE_FLASK_CODE)
+        temp_path = f.name
+
+    try:
+        result = parse_python_file(temp_path, "web.py", repo_urn)
+        assert {(api.http_method, api.route, api.framework) for api in result.apis} == {
+            ("GET", "/items", "Flask"),
+            ("POST", "/items", "Flask"),
+        }
+        assert result.functions[0].parameters == ["*args", "page", "**kwargs"]
     finally:
         os.remove(temp_path)
 

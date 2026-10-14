@@ -449,6 +449,32 @@ class GraphRetriever:
                 )
                 result.add_relationship(edge)
 
+                # An API is connected to its exact handler through IMPLEMENTS.
+                # Include that edge so source excerpts are not merely nearby
+                # functions but direct, static evidence for the endpoint.
+                if item["target"].label == "API":
+                    handlers = self.traversal_engine.get_direct_neighbors(
+                        source_id=item["target"].id,
+                        direction=TraversalDirection.INCOMING,
+                        rel_types=["IMPLEMENTS"],
+                        limit=10,
+                        context=ctx,
+                    )
+                    for handler_item in handlers:
+                        result.add_node(handler_item["target"])
+                        result.add_relationship(
+                            RetrievedEdge(
+                                source_id=handler_item["rel_source_id"],
+                                target_id=handler_item["rel_target_id"],
+                                rel_type=handler_item["rel_type"],
+                                properties=handler_item["rel_props"],
+                                direction="INCOMING",
+                                hop=2,
+                                provenance_type=handler_item["rel_props"].get("provenance_type"),
+                                confidence=float(handler_item["rel_props"].get("confidence") or 1.0),
+                            )
+                        )
+
                 # Depth 2: Files -> Classes/Functions/APIs
                 if spec.max_depth >= 2:
                     child_neighbors = self.traversal_engine.get_direct_neighbors(

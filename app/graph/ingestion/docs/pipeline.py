@@ -177,6 +177,7 @@ def ingest_documents(
             "title": pol.title,
             "category": pol.category,
             "company_id": company_urn,
+            "project_id": project_urn,
         })
         for rule in pol.rules:
             node_batches[NodeLabel.SECURITY_RULE.value].append({
@@ -185,6 +186,7 @@ def ingest_documents(
                 "policy_id": pol.urn,
                 "rule_text": rule.rule_text,
                 "severity": rule.severity,
+                "project_id": project_urn,
             })
 
     # Group Relationships by Type

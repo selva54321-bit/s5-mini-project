@@ -162,6 +162,11 @@ def ingest_repository(
     }
 
     external_packages_seen = set()
+    api_handler_urns = {
+        api.handler_func_urn
+        for parse_result in parse_results
+        for api in parse_result.apis
+    }
 
     for pr in parse_results:
         # File Node
@@ -172,6 +177,8 @@ def ingest_repository(
             "loc": pr.loc,
             "repo_id": repo_urn,
             "extension": ".py",
+            "workflow_nodes": pr.workflow_nodes,
+            "workflow_node_count": len(pr.workflow_nodes),
         })
 
         # Class Nodes
@@ -201,6 +208,8 @@ def ingest_repository(
                 "line_end": f.line_end,
                 "parameters": f.parameters,
                 "docstring": f.docstring or "",
+                "source_excerpt": f.source_excerpt,
+                "is_api_handler": f.urn in api_handler_urns,
             })
 
         # API Nodes
@@ -211,6 +220,7 @@ def ingest_repository(
                 "method": api.http_method,
                 "framework": api.framework,
                 "repo_id": repo_urn,
+                "handler_id": api.handler_func_urn,
             })
 
         # Test Nodes

@@ -1,4 +1,4 @@
-uvicorn app.showcase_api:app --reload
+.venv/bin/uvicorn app.showcase_api:app --reload
 
 # Enterprise Agentic RAG Pipeline
 

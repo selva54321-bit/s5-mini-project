@@ -187,6 +187,15 @@ class GraphContextBuilder:
             notable.append(f"Desc: \"{desc}\"")
         if props.get("file_path"):
             notable.append(f"File: `{props['file_path']}`")
+        if props.get("workflow_nodes"):
+            names = ", ".join(f"`{name}`" for name in props["workflow_nodes"])
+            notable.append(
+                f"LangGraph workflow nodes ({props.get('workflow_node_count', len(props['workflow_nodes']))}): {names}"
+            )
+
+        if props.get("is_api_handler") and props.get("source_excerpt"):
+            excerpt = str(props["source_excerpt"]).strip()
+            notable.append(f"API handler source:\n```python\n{excerpt}\n```")
 
         for item in notable:
             lines.append(f"  * {item}")

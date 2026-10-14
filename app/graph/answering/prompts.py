@@ -28,6 +28,8 @@ Your answers MUST be strictly grounded in the provided GRAPH RETRIEVAL CONTEXT. 
 
 5. CONCISE, TECHNICAL TONE:
    - Provide direct, structured, and informative answers with clear headings and bullet points.
+   - When an API handler source excerpt is present, explain its concrete control flow, calls, parameters, response handling, and error handling. Do not say the implementation is unavailable when that excerpt is evidence.
+   - When LangGraph workflow node metadata is present, report the exact stored count and names. Do not confuse workflow nodes with Python function definitions.
 """
 
 
