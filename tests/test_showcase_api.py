@@ -24,7 +24,10 @@ def test_question_endpoint_returns_grounded_response():
 
     app = create_app()
     app.dependency_overrides[get_answer_generator] = lambda: FakeGenerator()
-    response = TestClient(app).post("/api/query", json={"question": "What is eqrev?"})
+    response = TestClient(app).post(
+        "/api/query",
+        json={"question": "What is eqrev?", "project_id": "urn:project:local:demo"},
+    )
 
     assert response.status_code == 200
     assert response.json()["answer"] == "Grounded answer"

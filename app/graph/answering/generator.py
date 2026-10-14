@@ -59,6 +59,7 @@ class GraphAnswerGenerator:
         self,
         question: str,
         context: Optional[AccessControlContext] = None,
+        scope_project_urn: Optional[str] = None,
         max_context_chars: int = 15000,
     ) -> GroundedAnswerResponse:
         """
@@ -81,10 +82,13 @@ class GraphAnswerGenerator:
             with logfire.span("🔍 Graph Retrieval"):
                 start_retrieval_time = time.time()
                 try:
-                    retrieval_result: RetrievalResult = self.retriever.retrieve(
-                        query_or_spec=q_clean,
-                        context=auth_ctx,
-                    )
+                    query_or_spec = q_clean
+                    if scope_project_urn:
+                        query_or_spec = self.retriever.interpreter.interpret(
+                            q_clean,
+                            scope_project_urn=scope_project_urn,
+                        )
+                    retrieval_result: RetrievalResult = self.retriever.retrieve(query_or_spec=query_or_spec, context=auth_ctx)
                 except PermissionError as pe:
                     logfire.error(f"Access Control Error: {pe}")
                     return GroundedAnswerResponse(

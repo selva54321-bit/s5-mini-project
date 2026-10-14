@@ -1,3 +1,5 @@
+uvicorn app.showcase_api:app --reload
+
 # Enterprise Agentic RAG Pipeline
 
 ## Graph-RAG showcase
@@ -8,7 +10,7 @@ Launch the read-only repository-intelligence demo with:
 .venv/bin/uvicorn app.showcase_api:app --reload
 ```
 
-Then open `http://127.0.0.1:8000`. The UI lists ingested repositories, renders a bounded evidence subgraph, and asks grounded questions through the existing Graph-RAG answer generator. It does not expose Cypher execution, database credentials, or ingestion endpoints.
+Then open `http://127.0.0.1:8000`. Create a project, ingest a local workspace repository or Git URL, and upload PDF, DOCX, PPTX, HTML, Markdown, or TXT documents. Queries are constrained to the selected project and the UI renders a bounded evidence subgraph. It does not expose Cypher execution or database credentials.
 
 An enterprise-grade, agentic Retrieval-Augmented Generation (RAG) system built with **FastAPI**, **LangGraph**, **Gemini Embeddings**, **Groq (Llama 3.3 70B)**, **Qdrant Vector Database**, **FlashRank Reranker**, and **Logfire Observability**.
 

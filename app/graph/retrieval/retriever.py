@@ -81,6 +81,12 @@ class GraphRetriever:
         # automatically; otherwise return an explicit ambiguity for the caller.
         if spec.intent == QueryIntent.REPOSITORY_LOOKUP and not spec.entity_mentions:
             repositories = self.store.list_nodes_by_label("Repository", limit=spec.max_nodes)
+            if spec.scope_project_urn:
+                repositories = [
+                    repo for repo in repositories
+                    if repo.get("project_id") == spec.scope_project_urn
+                    or repo.get("project_urn") == spec.scope_project_urn
+                ]
             accessible_repositories = [
                 repo for repo in repositories
                 if self.access_controller.can_access_node(repo, ctx)
