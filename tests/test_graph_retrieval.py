@@ -536,10 +536,44 @@ def test_query_interpreter_does_not_treat_generic_project_as_entity():
     assert spec.entity_mentions == []
 
 
+def test_project_structure_question_uses_selected_project_as_default_scope():
+    spec = QueryInterpreter().interpret(
+        "Tell me the right format of this project structure",
+        scope_project_urn="urn:project:local:auth_proj",
+    )
+
+    assert spec.intent == QueryIntent.REPOSITORY_LOOKUP
+    assert spec.entity_mentions == []
+    assert spec.scope_project_urn == "urn:project:local:auth_proj"
+
+
+def test_open_ended_agent_question_does_not_treat_tell_as_a_repository():
+    spec = QueryInterpreter().interpret(
+        "I am an AI agent. Tell me everything about this project.",
+        scope_project_urn="urn:project:local:auth_proj",
+    )
+
+    assert spec.intent == QueryIntent.REPOSITORY_LOOKUP
+    assert spec.entity_mentions == []
+
+
 def test_repository_lookup_resolves_a_single_accessible_repository(graph_fixture):
     result = GraphRetriever(store=graph_fixture).retrieve("Show me the project")
 
     assert result.ambiguities == []
+    assert [node.name for node in result.starting_entities] == ["auth_repo"]
+    assert any(node.name == "routes.py" for node in result.nodes.values())
+
+
+def test_selected_project_is_used_for_generic_repository_questions(graph_fixture):
+    result = GraphRetriever(store=graph_fixture).retrieve(
+        QueryInterpreter().interpret(
+            "Tell me the right format of this project structure",
+            scope_project_urn="urn:project:local:auth_proj",
+        )
+    )
+
+    assert result.unresolved_references == []
     assert [node.name for node in result.starting_entities] == ["auth_repo"]
     assert any(node.name == "routes.py" for node in result.nodes.values())
 

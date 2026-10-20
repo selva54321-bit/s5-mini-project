@@ -75,10 +75,11 @@ class GraphRetriever:
 
         result = RetrievalResult(intent=spec.intent)
 
-        # A question such as "show me the project" has no repository name.  Do
-        # not mistake the generic word "project" for a graph entity or merge
-        # data from multiple repositories.  Resolve a sole accessible repository
-        # automatically; otherwise return an explicit ambiguity for the caller.
+        # A question such as "show me the project" has no repository name.  A
+        # selected project is a deliberate scope: retrieve every repository in
+        # that project, even when it contains more than one repository.  Without
+        # a scope we retain the ambiguity safeguard rather than merging data
+        # across unrelated projects.
         if spec.intent == QueryIntent.REPOSITORY_LOOKUP and not spec.entity_mentions:
             repositories = self.store.list_nodes_by_label("Repository", limit=spec.max_nodes)
             if spec.scope_project_urn:
@@ -91,7 +92,13 @@ class GraphRetriever:
                 repo for repo in repositories
                 if self.access_controller.can_access_node(repo, ctx)
             ]
-            if len(accessible_repositories) == 1:
+            if spec.scope_project_urn and accessible_repositories:
+                spec.entity_mentions = [repo["id"] for repo in accessible_repositories]
+                if len(accessible_repositories) > 1:
+                    result.warnings.append(
+                        f"Using all {len(accessible_repositories)} repositories in the selected project."
+                    )
+            elif len(accessible_repositories) == 1:
                 spec.entity_mentions = [accessible_repositories[0]["id"]]
             elif len(accessible_repositories) > 1:
                 result.ambiguities.append({

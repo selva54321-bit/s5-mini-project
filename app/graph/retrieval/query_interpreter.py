@@ -60,6 +60,18 @@ class QueryInterpreter:
         spec.scope_project_urn = scope_project_urn
         spec.scope_repo_urn = scope_repo_urn
         spec.raw_query = q_clean
+
+        # A project selected in the UI is an intentional scope, not text the
+        # user needs to repeat in every question.  Broad questions such as
+        # "tell me the project structure" should start from that project's
+        # repositories instead of attempting to resolve "structure" as a node.
+        if scope_project_urn and spec.intent == QueryIntent.ENTITY_LOOKUP and not spec.entity_mentions:
+            spec.intent = QueryIntent.REPOSITORY_LOOKUP
+            spec.direction = TraversalDirection.OUTGOING
+            spec.relationship_types = ["CONTAINS", "EXPOSES"]
+            spec.entity_types = ["Repository"]
+            spec.max_depth = 2
+            spec.max_nodes = 100
         return spec
 
     def _interpret_deterministic(self, query: str) -> Optional[RetrievalSpec]:
@@ -214,13 +226,21 @@ class QueryInterpreter:
             "functions exist in", "classes exist in", "endpoints exist in",
             "what functions", "what classes", "what apis", "what endpoints",
             "what api", "api endpoints", "show me", "tell me about repo", "list all",
+            "project structure", "repository structure", "folder structure", "directory structure",
+            "right format", "layout of",
         ]
         if any(kw in q_lower for kw in repo_content_keywords) or (
             any(kw in q_lower for kw in repo_keywords) and any(kw in q_lower for kw in ["what", "show", "list", "describe", "tell"])
         ):
             # Generic scope words are not graph entities.  Leave the scope empty
             # so the retriever can identify the accessible repositories instead.
-            generic_scope_terms = {"project", "repository", "repo", "codebase", "endpoints", "apis", "api"}
+            generic_scope_terms = {
+                "project", "repository", "repo", "codebase", "endpoints", "apis", "api",
+                "structure", "format", "layout", "folders", "folder", "directories", "directory",
+                "tell", "show", "describe", "explain", "everything", "all", "overview",
+                "details", "information", "about", "me", "this", "that", "right",
+                "ai", "agent", "assistant",
+            }
             mentions = [
                 mention for mention in self._extract_entity_mentions(query)
                 if mention.lower() not in generic_scope_terms
@@ -238,7 +258,7 @@ class QueryInterpreter:
                 repo_match = re.search(pat, query, re.IGNORECASE)
                 if repo_match:
                     repo_name = repo_match.group(1).strip(" ?.,;")
-                    if repo_name and repo_name.lower() not in {"the", "a", "this", "my", "our"} and repo_name not in mentions:
+                    if repo_name and repo_name.lower() not in generic_scope_terms | {"the", "a", "my", "our"} and repo_name not in mentions:
                         mentions.insert(0, repo_name)
                         break
             return RetrievalSpec(

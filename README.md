@@ -1,4 +1,5 @@
 .venv/bin/uvicorn app.showcase_api:app --reload
+how many nodes are present in graph.py in linux-agent1
 
 # Enterprise Agentic RAG Pipeline
 
