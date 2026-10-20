@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "graph-rag": {
+      "command": "/home/selva/projects/kutty project/.venv/bin/python",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "/home/selva/projects/kutty project"
+    }
+  }
+}

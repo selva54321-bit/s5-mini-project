@@ -5,6 +5,7 @@
 # --- CORE API & WEB FRAMEWORK ---
 fastapi                     # High-performance web framework for the API
 uvicorn[standard]           # ASGI server to run the FastAPI app
+mcp[cli]>=1.0,<2.0          # Model Context Protocol server for coding agents
 python-dotenv               # For loading configuration from .env files
 requests                    # HTTP library for internal/external API calls
 streamlit                   # Frontend dashboard for the chat interface

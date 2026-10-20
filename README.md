@@ -13,6 +13,28 @@ Launch the read-only repository-intelligence demo with:
 
 Then open `http://127.0.0.1:8000`. Create a project, ingest a local workspace repository or Git URL, and upload PDF, DOCX, PPTX, HTML, Markdown, or TXT documents. Queries are constrained to the selected project and the UI renders a bounded evidence subgraph. It does not expose Cypher execution or database credentials.
 
+## MCP server for coding agents
+
+This project also exposes a real [Model Context Protocol](https://modelcontextprotocol.io/) server over stdio. Compatible coding agents can use it to discover projects, retrieve a project overview or repository evidence, ask grounded questions, and—only when explicitly requested—create projects or ingest repositories/documents.
+
+Install dependencies and start it from the repository root:
+
+```bash
+.venv/bin/python -m app.mcp_server
+```
+
+For an MCP client configuration, copy and adjust [`mcp.json.example`](mcp.json.example). The server exposes these tools:
+
+- `list_projects`
+- `get_project_overview`
+- `query_project_graph`
+- `get_repository_evidence`
+- `create_project`
+- `ingest_repository`
+- `ingest_project_documents`
+
+The MCP server never exposes raw Cypher, Neo4j credentials, or a database wipe operation.
+
 An enterprise-grade, agentic Retrieval-Augmented Generation (RAG) system built with **FastAPI**, **LangGraph**, **Gemini Embeddings**, **Groq (Llama 3.3 70B)**, **Qdrant Vector Database**, **FlashRank Reranker**, and **Logfire Observability**.
 
 ---
