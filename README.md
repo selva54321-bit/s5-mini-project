@@ -1,6 +1,10 @@
 .venv/bin/uvicorn app.showcase_api:app --reload
 how many nodes are present in graph.py in linux-agent1
 
+to run this mcp
+cd "/home/selva/projects/kutty project"
+npx -y @modelcontextprotocol/inspector .venv/bin/python -m app.mcp_server
+
 # Enterprise Agentic RAG Pipeline
 
 ## Graph-RAG showcase
