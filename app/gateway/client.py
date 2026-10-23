@@ -5,7 +5,7 @@ from langchain_openai import ChatOpenAI
 from app.config import settings
 
 #for now we use portkey but later we can use external cache system
-
+#need to look for other gateway
 
 # Production gateway config:
 #   - Fallback: primary @rag/llama-3.3-70b-versatile → @brag/llama-3.1-8b-instant on failure
